@@ -202,6 +202,7 @@ const Chat = {
             case '/help':
                 this.addSystemMessage('Available commands:');
                 this.addSystemMessage('/help — Show this list');
+                this.addSystemMessage('/adminhelp — Open admin tools panel (admin)');
                 this.addSystemMessage('/clearchat — Clear chat history (admin)');
                 this.addSystemMessage('/kick <name> — Kick a user (admin)');
                 this.addSystemMessage('/lock — Toggle channel lock (admin)');
@@ -233,6 +234,14 @@ const Chat = {
                     return;
                 }
                 await Channels.toggleChannelLock();
+                break;
+
+            case '/adminhelp':
+                if (!Auth.getIsAdmin()) {
+                    this.addSystemMessage('Admin only.');
+                    return;
+                }
+                this.showAdminHelpModal();
                 break;
 
             default:
@@ -496,6 +505,105 @@ const Chat = {
         document.getElementById('chat-messages').innerHTML = '';
         this._lastSender = null;
         this._lastSenderTime = 0;
+    },
+
+    // Show admin help modal with tools
+    async showAdminHelpModal() {
+        // Remove existing modal if any
+        const existing = document.getElementById('admin-help-modal');
+        if (existing) existing.remove();
+
+        // Get online users in current channel
+        const channel = Channels.getCurrentChannel();
+        let users = [];
+        try {
+            const snap = await database.ref('users')
+                .orderByChild('currentChannel')
+                .equalTo(channel)
+                .once('value');
+            snap.forEach((child) => {
+                const u = child.val();
+                if (Channels.isUserOnline(u) && child.key !== Auth.getUserId()) {
+                    users.push({ uid: child.key, name: u.displayName });
+                }
+            });
+        } catch (e) {
+            console.error('[Chat] Error loading users for admin panel:', e);
+        }
+
+        const userRows = users.length > 0
+            ? users.map(u =>
+                `<div class="admin-user-row" style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg-input);border-radius:var(--radius-sm);margin-bottom:4px;">
+                    <span style="font-size:14px;">${this.escapeHtml(u.name)}</span>
+                    <button class="btn-kick admin-kick-btn" data-uid="${u.uid}" data-name="${this.escapeHtml(u.name)}" style="padding:4px 10px;font-size:10px;">KICK</button>
+                </div>`
+            ).join('')
+            : '<p style="color:var(--text-dim);font-size:13px;">No other users in channel</p>';
+
+        const modal = document.createElement('div');
+        modal.id = 'admin-help-modal';
+        modal.className = 'modal';
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width:450px;">
+                <div class="modal-header">
+                    <h2>ADMIN TOOLS</h2>
+                    <button id="close-admin-help" class="btn btn-close">&#10005;</button>
+                </div>
+                <div style="padding:20px;overflow-y:auto;">
+                    <div style="margin-bottom:20px;">
+                        <h3 style="font-family:var(--font-mono);font-size:11px;letter-spacing:2px;color:var(--accent-green);margin-bottom:10px;">COMMANDS</h3>
+                        <div style="background:var(--bg-input);border-radius:var(--radius-md);padding:12px;font-family:var(--font-mono);font-size:12px;color:var(--text-secondary);line-height:2;">
+                            <div><span style="color:var(--accent-green);">/kick &lt;name&gt;</span> — Remove a user</div>
+                            <div><span style="color:var(--accent-green);">/lock</span> — Lock/unlock channel</div>
+                            <div><span style="color:var(--accent-green);">/clearchat</span> — Wipe chat history</div>
+                            <div><span style="color:var(--accent-green);">/adminhelp</span> — This panel</div>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:20px;">
+                        <h3 style="font-family:var(--font-mono);font-size:11px;letter-spacing:2px;color:var(--accent-green);margin-bottom:10px;">QUICK ACTIONS</h3>
+                        <button id="admin-toggle-lock" class="btn btn-admin" style="width:100%;margin-bottom:8px;">TOGGLE CHANNEL LOCK</button>
+                        <button id="admin-clear-chat" class="btn btn-admin" style="width:100%;">CLEAR CHAT HISTORY</button>
+                    </div>
+                    <div>
+                        <h3 style="font-family:var(--font-mono);font-size:11px;letter-spacing:2px;color:var(--accent-red);margin-bottom:10px;">USERS IN CHANNEL</h3>
+                        <div id="admin-user-list">${userRows}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        // Close button
+        document.getElementById('close-admin-help').addEventListener('click', () => modal.remove());
+        modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+        // Toggle lock button
+        document.getElementById('admin-toggle-lock').addEventListener('click', async () => {
+            await Channels.toggleChannelLock();
+            modal.remove();
+        });
+
+        // Clear chat button
+        document.getElementById('admin-clear-chat').addEventListener('click', async () => {
+            if (confirm('Clear all chat messages?')) {
+                await this.clearChatHistory();
+                modal.remove();
+            }
+        });
+
+        // Kick buttons
+        modal.querySelectorAll('.admin-kick-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const uid = btn.dataset.uid;
+                const name = btn.dataset.name;
+                if (confirm(`Kick ${name}?`)) {
+                    await Channels.kickUser(uid);
+                    btn.closest('.admin-user-row').remove();
+                    this.addSystemMessage(`${name} has been kicked.`);
+                }
+            });
+        });
     },
 
     // Escape HTML to prevent XSS

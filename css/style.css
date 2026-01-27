@@ -231,44 +231,37 @@ body {
 }
 
 /* ========================================
-   APP SCREEN — Nested Flexbox Layout
-   Outer: column (header + main)
-   Main: row (channels + ptt + chat)
-   Every flex child that must shrink: min-height:0 / min-width:0
+   APP SCREEN — Position-Fixed Layout
+   Each panel is pinned to the viewport with
+   explicit top/left/right/bottom bounds.
+   No flex/grid height chain to break.
    ======================================== */
 #app-screen {
-    display: flex;
-    flex-direction: column;
+    position: relative;
     height: 100vh;
     width: 100vw;
     overflow: hidden;
     background: var(--bg-dark);
 }
 
-.app-main {
-    flex: 1 1 0;
-    display: flex;
-    flex-direction: row;
-    overflow: hidden;
-    min-height: 0;
-}
-
+/* Wrappers are invisible on desktop — children are position:fixed */
+.app-main,
 .radio-view {
-    flex: 1 1 0;
-    display: flex;
-    flex-direction: row;
-    overflow: hidden;
-    min-height: 0;
-    min-width: 0;
+    display: contents;
 }
 
-/* Header */
+/* Header — fixed 52px bar at top */
 .app-header {
-    flex-shrink: 0;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 52px;
+    z-index: 50;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 20px;
+    padding: 0 20px;
     background: var(--bg-panel);
     border-bottom: 2px solid var(--border-color);
 }
@@ -370,11 +363,14 @@ body {
 }
 
 /* ========================================
-   CHANNELS PANEL (left sidebar)
+   CHANNELS PANEL — fixed left column
    ======================================== */
 .channels-panel {
+    position: fixed;
+    top: 52px;
+    left: 0;
+    bottom: 0;
     width: 220px;
-    flex-shrink: 0;
     background: var(--bg-panel);
     border-right: 2px solid var(--border-color);
     padding: 20px;
@@ -599,11 +595,14 @@ body {
 }
 
 /* ========================================
-   PTT PANEL (center, fills remaining width)
+   PTT PANEL — fixed center area
    ======================================== */
 .ptt-panel {
-    flex: 1 1 0;
-    min-width: 0;
+    position: fixed;
+    top: 52px;
+    left: 220px;
+    right: 300px;
+    bottom: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -938,25 +937,27 @@ body {
 }
 
 /* ========================================
-   CHAT PANEL (right sidebar)
+   CHAT PANEL — fixed right column
    ======================================== */
 .chat-panel {
+    position: fixed;
+    top: 52px;
+    right: 0;
+    bottom: 0;
     width: 300px;
-    flex-shrink: 0;
     background: var(--bg-panel);
     border-left: 2px solid var(--border-color);
-    padding: 20px;
+    padding: 15px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    min-height: 0;
 }
 
 .chat-messages {
     flex: 1;
     overflow-y: auto;
-    margin-bottom: 15px;
-    padding-right: 10px;
+    margin-bottom: 10px;
+    padding-right: 6px;
     min-height: 0;
 }
 
@@ -1058,13 +1059,13 @@ body {
 
 #chat-input {
     flex: 1;
-    padding: 12px 14px;
+    padding: 8px 10px;
     background: var(--bg-input);
     border: 2px solid var(--border-color);
     border-radius: var(--radius-md);
     color: var(--text-primary);
-    font-size: 16px;
-    min-height: 44px;
+    font-size: 14px;
+    min-height: 36px;
 }
 
 #chat-input:focus {
@@ -1073,8 +1074,8 @@ body {
 }
 
 .btn-send {
-    padding: 12px 18px;
-    font-size: 13px;
+    padding: 8px 14px;
+    font-size: 12px;
 }
 
 /* Typing Indicator */
@@ -1290,20 +1291,41 @@ body {
         overflow: hidden;
     }
 
-    /* Switch to vertical stacking on mobile */
+    /* Undo fixed positioning — switch to flex column */
     #app-screen {
+        display: flex;
+        flex-direction: column;
         height: 100vh;
         height: 100dvh;
     }
 
+    .app-header,
+    .channels-panel,
+    .ptt-panel,
+    .chat-panel {
+        position: static;
+        top: auto;
+        left: auto;
+        right: auto;
+        bottom: auto;
+        width: auto;
+        height: auto;
+    }
+
     .app-main {
+        display: flex;
         flex-direction: column;
+        flex: 1;
+        overflow: hidden;
+        min-height: 0;
     }
 
     .radio-view {
+        display: flex;
         flex-direction: column;
         flex: 1;
         overflow-y: auto;
+        min-height: 0;
     }
 
     .radio-view.tab-hidden {
@@ -1312,6 +1334,8 @@ body {
 
     /* Header */
     .app-header {
+        flex-shrink: 0;
+        height: auto;
         padding: 8px 12px;
     }
 
