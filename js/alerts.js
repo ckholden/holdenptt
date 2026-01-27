@@ -144,6 +144,11 @@ const Alerts = {
         if (typeof Chat !== 'undefined') {
             Chat.addSystemMessage(`ALERT from ${alert.sender}`);
         }
+
+        // Auto-hide after 5 seconds as a safety net
+        this.alertTimeout = setTimeout(() => {
+            this.hideAlert();
+        }, 5000);
     },
 
     // Hide alert overlay

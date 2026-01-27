@@ -681,6 +681,14 @@ body {
     margin-top: 4px;
 }
 
+.chat-message.own {
+    border-left-color: var(--accent-orange);
+}
+
+.chat-message.own .sender {
+    color: var(--accent-orange);
+}
+
 .chat-message.system {
     border-left-color: var(--accent-blue);
     background: rgba(68, 136, 255, 0.1);

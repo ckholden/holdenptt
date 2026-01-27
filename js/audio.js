@@ -9,6 +9,7 @@ const PTTAudio = {
     currentSpeaker: null,
     signalingRef: null,
     speakerRef: null,
+    signalingChildRef: null,
     iceCandidatesQueue: {},
 
     // WebRTC configuration
@@ -40,6 +41,10 @@ const PTTAudio = {
             e.preventDefault();
             this.stopTransmit();
         });
+        pttBtn.addEventListener('touchcancel', (e) => {
+            e.preventDefault();
+            if (this.isTransmitting) this.stopTransmit();
+        });
 
         // Keyboard support (spacebar)
         document.addEventListener('keydown', (e) => {
@@ -50,7 +55,7 @@ const PTTAudio = {
         });
 
         document.addEventListener('keyup', (e) => {
-            if (e.code === 'Space') {
+            if (e.code === 'Space' && !this.isInputFocused()) {
                 e.preventDefault();
                 this.stopTransmit();
             }
@@ -111,7 +116,8 @@ const PTTAudio = {
 
         // Listen for signaling messages directed at us
         const userId = Auth.getUserId();
-        this.signalingRef.child(userId).on('child_added', (snapshot) => {
+        this.signalingChildRef = this.signalingRef.child(userId);
+        this.signalingChildRef.on('child_added', (snapshot) => {
             const data = snapshot.val();
             this.handleSignaling(data);
             // Remove processed signal
@@ -128,7 +134,7 @@ const PTTAudio = {
 
         // Stop transmitting if we are
         if (this.isTransmitting) {
-            this.stopTransmit();
+            await this.stopTransmit();
         }
 
         // Close all peer connections
@@ -137,8 +143,9 @@ const PTTAudio = {
         });
 
         // Remove listeners
-        if (this.signalingRef) {
-            this.signalingRef.child(Auth.getUserId()).off();
+        if (this.signalingChildRef) {
+            this.signalingChildRef.off();
+            this.signalingChildRef = null;
         }
         if (this.speakerRef) {
             this.speakerRef.off();
@@ -352,6 +359,9 @@ const PTTAudio = {
             if (!this.localStream) return;
         }
 
+        const user = Auth.getUser();
+        if (!user) return;
+
         // Check if someone else is speaking
         if (this.currentSpeaker && this.currentSpeaker.userId !== Auth.getUserId()) {
             console.log('[Audio] Channel busy');
@@ -366,13 +376,25 @@ const PTTAudio = {
             track.enabled = true;
         });
 
-        // Update active speaker in database
+        // Update active speaker in database using transaction to avoid race conditions
         const channel = Channels.getCurrentChannel();
-        await database.ref(`channels/${channel}/activeSpeaker`).set({
-            userId: Auth.getUserId(),
-            displayName: Auth.getUser().displayName,
-            timestamp: firebase.database.ServerValue.TIMESTAMP
+        const speakerRef = database.ref(`channels/${channel}/activeSpeaker`);
+
+        await speakerRef.transaction((current) => {
+            // Only claim if nobody is speaking, or we already own it
+            if (!current || current.userId === Auth.getUserId()) {
+                return {
+                    userId: Auth.getUserId(),
+                    displayName: user.displayName,
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                };
+            }
+            // Someone else is speaking, abort
+            return;
         });
+
+        // Setup onDisconnect to clear speaker if we drop
+        speakerRef.onDisconnect().remove();
 
         // Update UI
         this.updateTransmitUI(true);
@@ -397,14 +419,19 @@ const PTTAudio = {
             });
         }
 
-        // Clear active speaker if we were the speaker
+        // Clear active speaker using transaction (atomic check-and-clear)
         const channel = Channels.getCurrentChannel();
-        const speakerSnapshot = await database.ref(`channels/${channel}/activeSpeaker`).once('value');
-        const speaker = speakerSnapshot.val();
+        const speakerRef = database.ref(`channels/${channel}/activeSpeaker`);
 
-        if (speaker && speaker.userId === Auth.getUserId()) {
-            await database.ref(`channels/${channel}/activeSpeaker`).remove();
-        }
+        await speakerRef.transaction((current) => {
+            if (current && current.userId === Auth.getUserId()) {
+                return null; // Clear it
+            }
+            return current; // Leave it (someone else took it)
+        });
+
+        // Cancel the onDisconnect since we cleaned up normally
+        speakerRef.onDisconnect().cancel();
 
         // Update UI
         this.updateTransmitUI(false);
@@ -437,6 +464,11 @@ const PTTAudio = {
                 // Mark user as speaking in member list
                 Channels.markSpeaking(speaker.userId, true);
             }
+
+            // Show who is talking in chat
+            if (typeof Chat !== 'undefined' && speaker.userId !== Auth.getUserId()) {
+                Chat.addSystemMessage(`🎙 ${speaker.displayName} is transmitting`);
+            }
         } else {
             // No one is speaking
             txIndicator.className = 'tx-indicator';
@@ -462,12 +494,12 @@ const PTTAudio = {
     },
 
     // Cleanup
-    cleanup() {
+    async cleanup() {
         console.log('[Audio] Cleaning up...');
 
         // Stop transmission
         if (this.isTransmitting) {
-            this.stopTransmit();
+            await this.stopTransmit();
         }
 
         // Close all peer connections
@@ -482,11 +514,15 @@ const PTTAudio = {
         }
 
         // Remove listeners
-        if (this.signalingRef) {
-            this.signalingRef.off();
+        if (this.signalingChildRef) {
+            this.signalingChildRef.off();
+            this.signalingChildRef = null;
         }
         if (this.speakerRef) {
             this.speakerRef.off();
         }
+
+        this.signalingRef = null;
+        this.speakerRef = null;
     }
 };

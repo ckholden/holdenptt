@@ -182,7 +182,7 @@ const Recording = {
                 size: blob.size,
                 storageUrl: downloadUrl,
                 storagePath: filename,
-                recordedBy: Auth.getUser().displayName
+                recordedBy: Auth.getUser() ? Auth.getUser().displayName : 'Unknown'
             });
 
             console.log('[Recording] Recording saved successfully');
@@ -296,36 +296,49 @@ const Recording = {
             minute: '2-digit'
         });
 
-        div.innerHTML = `
-            <div class="recording-info">
-                <div class="channel">${rec.channelName}</div>
-                <div class="date">${dateStr}</div>
-                <div class="duration">${rec.duration}s • ${rec.recordedBy}</div>
-            </div>
-            <div class="recording-actions">
-                <button class="btn btn-play" data-url="${rec.storageUrl}">▶ Play</button>
-                <button class="btn btn-download" data-url="${rec.storageUrl}" data-name="${rec.channelName}_${rec.timestamp}.webm">⬇ Download</button>
-                <button class="btn btn-delete" data-key="${rec.key}" data-path="${rec.storagePath}">🗑</button>
-            </div>
+        // Build DOM safely to prevent XSS
+        const infoDiv = document.createElement('div');
+        infoDiv.className = 'recording-info';
+
+        const channelDiv = document.createElement('div');
+        channelDiv.className = 'channel';
+        channelDiv.textContent = rec.channelName;
+
+        const dateDiv = document.createElement('div');
+        dateDiv.className = 'date';
+        dateDiv.textContent = dateStr;
+
+        const durationDiv = document.createElement('div');
+        durationDiv.className = 'duration';
+        durationDiv.textContent = `${rec.duration}s • ${rec.recordedBy}`;
+
+        infoDiv.appendChild(channelDiv);
+        infoDiv.appendChild(dateDiv);
+        infoDiv.appendChild(durationDiv);
+
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'recording-actions';
+        actionsDiv.innerHTML = `
+            <button class="btn btn-play">▶ Play</button>
+            <button class="btn btn-download">⬇ Download</button>
+            <button class="btn btn-delete">🗑</button>
         `;
 
-        // Setup button handlers
-        div.querySelector('.btn-play').addEventListener('click', (e) => {
-            const url = e.target.dataset.url;
-            this.playRecording(url);
+        div.appendChild(infoDiv);
+        div.appendChild(actionsDiv);
+
+        // Setup button handlers using closure (no data attributes needed)
+        div.querySelector('.btn-play').addEventListener('click', () => {
+            this.playRecording(rec.storageUrl);
         });
 
-        div.querySelector('.btn-download').addEventListener('click', (e) => {
-            const url = e.target.dataset.url;
-            const name = e.target.dataset.name;
-            this.downloadRecording(url, name);
+        div.querySelector('.btn-download').addEventListener('click', () => {
+            this.downloadRecording(rec.storageUrl, `${rec.channelName}_${rec.timestamp}.webm`);
         });
 
-        div.querySelector('.btn-delete').addEventListener('click', async (e) => {
-            const key = e.target.dataset.key;
-            const path = e.target.dataset.path;
+        div.querySelector('.btn-delete').addEventListener('click', async () => {
             if (confirm('Delete this recording?')) {
-                await this.deleteRecording(key, path);
+                await this.deleteRecording(rec.key, rec.storagePath);
                 div.remove();
             }
         });

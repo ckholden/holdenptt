@@ -4,7 +4,11 @@
 
 const Chat = {
     chatRef: null,
-    messageLimit: 50,
+    messageLimit: 100,
+    cleanupInterval: null,
+
+    // Messages older than 24 hours are auto-deleted
+    RETENTION_MS: 24 * 60 * 60 * 1000,
 
     // Initialize chat
     init() {
@@ -29,20 +33,26 @@ const Chat = {
     startListening(channel) {
         console.log('[Chat] Listening to channel:', channel);
 
-        // Clear existing messages
+        // Clear existing display
         this.clearMessages();
 
         // Setup listener
         this.chatRef = database.ref(`channels/${channel}/chat`);
 
-        // Listen for new messages (limit to last N)
+        // Only load messages from the last 24 hours
+        const cutoff = Date.now() - this.RETENTION_MS;
+
         this.chatRef
             .orderByChild('timestamp')
+            .startAt(cutoff)
             .limitToLast(this.messageLimit)
             .on('child_added', (snapshot) => {
                 const message = snapshot.val();
                 this.displayMessage(message);
             });
+
+        // Cleanup old messages periodically (every 10 minutes)
+        this.startCleanup(channel);
     },
 
     // Stop listening to current channel
@@ -51,12 +61,50 @@ const Chat = {
             this.chatRef.off();
             this.chatRef = null;
         }
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+            this.cleanupInterval = null;
+        }
     },
 
     // Switch channels
     switchChannel(oldChannel, newChannel) {
         this.stopListening();
         this.startListening(newChannel);
+    },
+
+    // Periodically clean up old messages from the database
+    startCleanup(channel) {
+        if (this.cleanupInterval) {
+            clearInterval(this.cleanupInterval);
+        }
+
+        // Run cleanup every 10 minutes
+        this.cleanupInterval = setInterval(() => {
+            this.cleanupOldMessages(channel);
+        }, 10 * 60 * 1000);
+
+        // Also run once now
+        this.cleanupOldMessages(channel);
+    },
+
+    // Delete messages older than 24 hours
+    async cleanupOldMessages(channel) {
+        const cutoff = Date.now() - this.RETENTION_MS;
+        const chatRef = database.ref(`channels/${channel}/chat`);
+
+        try {
+            const snapshot = await chatRef
+                .orderByChild('timestamp')
+                .endAt(cutoff)
+                .once('value');
+
+            snapshot.forEach((child) => {
+                child.ref.remove();
+            });
+        } catch (error) {
+            console.error('[Chat] Error cleaning up old messages:', error);
+        }
     },
 
     // Send a message
@@ -92,6 +140,12 @@ const Chat = {
 
         const div = document.createElement('div');
         div.className = 'chat-message';
+
+        // Highlight if it's the current user's message
+        const isOwn = message.userId === Auth.getUserId();
+        if (isOwn) {
+            div.classList.add('own');
+        }
 
         const time = message.timestamp ? new Date(message.timestamp).toLocaleTimeString([], {
             hour: '2-digit',

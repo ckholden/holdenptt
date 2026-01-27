@@ -110,8 +110,8 @@ const Auth = {
             }
 
             // Cleanup audio
-            if (typeof Audio !== 'undefined') {
-                Audio.cleanup();
+            if (typeof PTTAudio !== 'undefined') {
+                await PTTAudio.cleanup();
             }
 
             // Sign out from Firebase
