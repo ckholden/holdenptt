@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nRename to Holden Family Radio, add admin system, overhaul chat UI\n\n- Renamed app to \"Holden Family Radio\" everywhere \\(title, logo, manifest\\)\n- Login: changed label to \"First Name or Callsign\"\n- Admin system: gear icon on login reveals admin code field. Admins get\n  KICK buttons next to users and LOCK/UNLOCK CHANNEL control. Kicked\n  users get an alert and are logged out immediately.\n- Chat UI: message grouping \\(consecutive same-user within 2min\\),\n  inline timestamps next to sender name, larger text \\(15px\\),\n  auto-linked URLs, unread message badge on chat header.\n- Admin password set to \"holdenadmin\" in config.js\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push)"
+    ]
+  }
+}
