@@ -15,18 +15,18 @@
 // ========================================
 
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyDnC6f9qmwCKO5KqVOaEikAQleIN87NxS8",
+    authDomain: "holdenptt-ce145.firebaseapp.com",
+    databaseURL: "https://holdenptt-ce145-default-rtdb.firebaseio.com",
+    projectId: "holdenptt-ce145",
+    storageBucket: "holdenptt-ce145.firebasestorage.app",
+    messagingSenderId: "60027169649",
+    appId: "1:60027169649:web:6a43b7d8357bb2e095e4d0"
 };
 
 // Room password - share this with your family/friends
 // Anyone with this password can join the room
-const ROOM_PASSWORD = "changeme";
+const ROOM_PASSWORD = "3361";
 
 // ========================================
 // DO NOT EDIT BELOW THIS LINE
