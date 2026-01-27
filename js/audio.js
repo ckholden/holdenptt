@@ -15,6 +15,7 @@ const PTTAudio = {
     // Roger beep audio context
     rogerContext: null,
     lastSpeakerName: null,
+    audioUnlocked: false,
 
     // WebRTC configuration
     rtcConfig: {
@@ -123,12 +124,31 @@ const PTTAudio = {
         this.signalingChildRef = this.signalingRef.child(userId);
         this.signalingChildRef.on('child_added', (snapshot) => {
             const data = snapshot.val();
-            this.handleSignaling(data);
+            if (data) {
+                this.handleSignaling(data);
+            }
             // Remove processed signal
             snapshot.ref.remove();
         });
 
-        // Announce presence for WebRTC
+        // Watch for new users joining this channel so we can connect to them
+        this.usersRef = database.ref('users');
+        this.channelUsersQuery = this.usersRef.orderByChild('currentChannel').equalTo(channel);
+        this.channelUsersQuery.on('child_added', (snapshot) => {
+            const peerId = snapshot.key;
+            const user = snapshot.val();
+            if (peerId !== userId && user.online && !this.peerConnections[peerId]) {
+                console.log('[Audio] New user detected in channel:', user.displayName);
+                // Small delay to let the other user set up their signaling listener
+                setTimeout(() => {
+                    if (!this.peerConnections[peerId]) {
+                        this.createPeerConnection(peerId, true);
+                    }
+                }, 1000);
+            }
+        });
+
+        // Announce presence for WebRTC (connect to existing users)
         await this.announcePresence(channel);
     },
 
@@ -153,6 +173,10 @@ const PTTAudio = {
         }
         if (this.speakerRef) {
             this.speakerRef.off();
+        }
+        if (this.channelUsersQuery) {
+            this.channelUsersQuery.off();
+            this.channelUsersQuery = null;
         }
 
         this.signalingRef = null;
@@ -224,12 +248,30 @@ const PTTAudio = {
             }
         };
 
+        // Handle ICE connection state (more reliable than connectionState)
+        pc.oniceconnectionstatechange = () => {
+            console.log('[Audio] ICE state:', peerId, pc.iceConnectionState);
+            if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                Chat.addSystemMessage('Audio link established');
+            } else if (pc.iceConnectionState === 'failed') {
+                console.error('[Audio] ICE connection failed for:', peerId);
+                this.closePeerConnection(peerId);
+                // Try to reconnect
+                setTimeout(() => this.createPeerConnection(peerId, true), 2000);
+            } else if (pc.iceConnectionState === 'disconnected') {
+                // Give it a moment — disconnected can recover
+                setTimeout(() => {
+                    if (this.peerConnections[peerId] &&
+                        this.peerConnections[peerId].iceConnectionState === 'disconnected') {
+                        this.closePeerConnection(peerId);
+                    }
+                }, 5000);
+            }
+        };
+
         // Handle connection state
         pc.onconnectionstatechange = () => {
             console.log('[Audio] Connection state:', peerId, pc.connectionState);
-            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
-                this.closePeerConnection(peerId);
-            }
         };
 
         // If initiator, create offer
@@ -325,17 +367,55 @@ const PTTAudio = {
         database.ref(`channels/${channel}/signaling/${peerId}`).push(data);
     },
 
+    // Unlock audio playback (must be called from a user gesture)
+    unlockAudio() {
+        if (this.audioUnlocked) return;
+        this.audioUnlocked = true;
+        console.log('[Audio] Unlocking audio playback');
+
+        // Play a silent buffer to unlock audio on iOS/mobile
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const buffer = ctx.createBuffer(1, 1, 22050);
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        source.start(0);
+
+        // Also resume any suspended audio context
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+
+        // Try to play all existing audio elements
+        document.querySelectorAll('audio[id^="audio-"]').forEach(el => {
+            el.play().catch(() => {});
+        });
+    },
+
     // Handle remote audio stream
     handleRemoteStream(peerId, stream) {
+        console.log('[Audio] Setting up remote audio for:', peerId);
+
         // Create audio element for this peer
         let audio = document.getElementById(`audio-${peerId}`);
         if (!audio) {
             audio = document.createElement('audio');
             audio.id = `audio-${peerId}`;
             audio.autoplay = true;
+            audio.playsInline = true;
+            audio.setAttribute('playsinline', '');
             document.body.appendChild(audio);
         }
         audio.srcObject = stream;
+
+        // Explicitly try to play (handles autoplay policy)
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch((error) => {
+                console.warn('[Audio] Autoplay blocked for peer:', peerId, error.message);
+                Chat.addSystemMessage('Tap the PTT button once to enable audio playback.');
+            });
+        }
     },
 
     // Close peer connection
@@ -371,6 +451,9 @@ const PTTAudio = {
             console.log('[Audio] Channel busy');
             return;
         }
+
+        // Unlock audio on first user gesture (needed for mobile)
+        this.unlockAudio();
 
         console.log('[Audio] Starting transmission');
         this.isTransmitting = true;
@@ -568,6 +651,10 @@ const PTTAudio = {
         }
         if (this.speakerRef) {
             this.speakerRef.off();
+        }
+        if (this.channelUsersQuery) {
+            this.channelUsersQuery.off();
+            this.channelUsersQuery = null;
         }
 
         this.signalingRef = null;
