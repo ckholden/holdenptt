@@ -70,24 +70,8 @@ const Recording = {
                 stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             }
 
-            // Also capture incoming audio from peers
-            const audioContext = new AudioContext();
-            const destination = audioContext.createMediaStreamDestination();
-
-            // Add local mic
-            const localSource = audioContext.createMediaStreamSource(stream);
-            localSource.connect(destination);
-
-            // Add remote audio elements
-            document.querySelectorAll('audio[id^="audio-"]').forEach(audioEl => {
-                if (audioEl.srcObject) {
-                    const remoteSource = audioContext.createMediaStreamSource(audioEl.srcObject);
-                    remoteSource.connect(destination);
-                }
-            });
-
-            // Create MediaRecorder
-            this.mediaRecorder = new MediaRecorder(destination.stream, {
+            // Record the microphone stream directly
+            this.mediaRecorder = new MediaRecorder(stream, {
                 mimeType: this.getSupportedMimeType()
             });
 

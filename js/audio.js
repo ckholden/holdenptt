@@ -63,7 +63,7 @@ const PTTAudio = {
         this.getAudioContext();
         const ctx = this.audioContext;
         if (ctx.state === 'suspended') ctx.resume();
-        const buf = ctx.createBuffer(1, 1, this.SAMPLE_RATE);
+        const buf = ctx.createBuffer(1, 1, ctx.sampleRate);
         const src = ctx.createBufferSource();
         src.buffer = buf;
         src.connect(ctx.destination);
@@ -72,9 +72,7 @@ const PTTAudio = {
 
     getAudioContext() {
         if (!this.audioContext) {
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: this.SAMPLE_RATE
-            });
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
         }
         return this.audioContext;
     },
@@ -205,12 +203,15 @@ const PTTAudio = {
         const streamRef = database.ref(`channels/${channel}/audioStream`);
         const senderId = Auth.getUserId();
 
-        const captureCtx = new (window.AudioContext || window.webkitAudioContext)({
-            sampleRate: this.SAMPLE_RATE
-        });
+        // Use browser's native sample rate for capture (don't force 8kHz — many browsers reject it)
+        const captureCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const nativeRate = captureCtx.sampleRate;
+        const targetRate = this.SAMPLE_RATE;
+
+        console.log('[Audio] Capture context sample rate:', nativeRate, '-> downsampling to', targetRate);
 
         const source = captureCtx.createMediaStreamSource(this.localStream);
-        const processor = captureCtx.createScriptProcessorNode(4096, 1, 1);
+        const processor = captureCtx.createScriptProcessor(4096, 1, 1);
 
         this.chunkBuffer = [];
         let chunkCount = 0;
@@ -220,10 +221,13 @@ const PTTAudio = {
 
             const input = e.inputBuffer.getChannelData(0);
 
-            // Downsample to Int16
-            const int16 = new Int16Array(input.length);
-            for (let i = 0; i < input.length; i++) {
-                const s = Math.max(-1, Math.min(1, input[i]));
+            // Downsample from native rate to target rate
+            const ratio = nativeRate / targetRate;
+            const downLen = Math.floor(input.length / ratio);
+            const int16 = new Int16Array(downLen);
+            for (let i = 0; i < downLen; i++) {
+                const srcIdx = Math.floor(i * ratio);
+                const s = Math.max(-1, Math.min(1, input[srcIdx]));
                 int16[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
             }
 
