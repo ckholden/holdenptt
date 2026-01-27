@@ -19,6 +19,7 @@ const PTTAudio = {
     playQueue: [],
     isPlaying: false,
     pttLocked: false,
+    _suppressSpeakerMsg: false,
 
     SAMPLE_RATE: 8000,
     CHUNK_INTERVAL: 250,
@@ -107,11 +108,17 @@ const PTTAudio = {
         if (stale) {
             // Check if that user is actually still online
             const userSnap = await database.ref(`users/${stale.userId}/online`).once('value');
-            if (!userSnap.val()) {
-                console.log('[Audio] Clearing stale speaker');
+            const isOnline = userSnap.val();
+            // Also check timestamp - if older than 30 seconds, consider stale
+            const age = stale.timestamp ? (Date.now() - stale.timestamp) : Infinity;
+            if (!isOnline || age > 30000) {
+                console.log('[Audio] Clearing stale speaker (online:', isOnline, 'age:', age, 'ms)');
                 await this.speakerRef.remove();
             }
         }
+
+        // Suppress the first speaker change message (stale data on join)
+        this._suppressSpeakerMsg = true;
 
         // Listen for speaker changes
         this.speakerRef.on('value', (s) => this.handleSpeakerChange(s.val()));
@@ -397,13 +404,16 @@ const PTTAudio = {
                 info.textContent = `${speaker.displayName} is talking`;
                 Channels.markSpeaking(speaker.userId, true);
             }
-            if (typeof Chat !== 'undefined' && speaker.userId !== Auth.getUserId()) {
-                Chat.addSystemMessage(`🎙 ${speaker.displayName} is transmitting`);
+            // Only show system message for new transmissions, not on initial join
+            if (typeof Chat !== 'undefined' && speaker.userId !== Auth.getUserId() && !this._suppressSpeakerMsg) {
+                Chat.addSystemMessage(`${speaker.displayName} is transmitting`);
             }
+            this._suppressSpeakerMsg = false;
         } else {
-            if (prev && prev.userId !== Auth.getUserId()) {
+            if (prev && prev.userId !== Auth.getUserId() && !this._suppressSpeakerMsg) {
                 this.playRogerBeep();
             }
+            this._suppressSpeakerMsg = false;
             ind.className = 'tx-indicator';
             txt.textContent = 'STANDBY';
             info.textContent = '';

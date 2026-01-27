@@ -914,7 +914,8 @@ body {
     }
 
     .channel-members {
-        display: none;
+        max-height: 120px;
+        margin-bottom: 10px;
     }
 
     .alert-section {
