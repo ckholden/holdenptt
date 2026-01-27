@@ -353,7 +353,7 @@ const PTTAudio = {
         }
 
         // Check if someone else is speaking
-        if (this.currentSpeaker && this.currentSpeaker.odsp !== Auth.getUserId()) {
+        if (this.currentSpeaker && this.currentSpeaker.userId !== Auth.getUserId()) {
             console.log('[Audio] Channel busy');
             return;
         }
@@ -369,7 +369,7 @@ const PTTAudio = {
         // Update active speaker in database
         const channel = Channels.getCurrentChannel();
         await database.ref(`channels/${channel}/activeSpeaker`).set({
-            odsp: Auth.getUserId(),
+            userId: Auth.getUserId(),
             displayName: Auth.getUser().displayName,
             timestamp: firebase.database.ServerValue.TIMESTAMP
         });
