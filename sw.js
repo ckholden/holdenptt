@@ -1,4 +1,4 @@
-const CACHE_NAME = 'holdenptt-v5';
+const CACHE_NAME = 'holdenptt-v6';
 const ASSETS = [
     './',
     './index.html',
@@ -10,6 +10,7 @@ const ASSETS = [
     './js/audio.js',
     './js/alerts.js',
     './js/recording.js',
+    './js/fcm.js',
     './js/app.js'
 ];
 
@@ -29,18 +30,48 @@ self.addEventListener('activate', (e) => {
     self.clients.claim();
 });
 
+// FCM push event — show notification when app is backgrounded/closed
+self.addEventListener('push', (e) => {
+    if (!e.data) return;
+
+    let data;
+    try {
+        const payload = e.data.json();
+        data = payload.data || {};
+    } catch (err) {
+        return;
+    }
+
+    if (data.type !== 'alert') return;
+
+    const title = 'ALERT - Holden PTT';
+    const options = {
+        body: `Emergency alert from ${data.sender || 'Unknown'} on ${data.channel || 'channel'}`,
+        tag: 'ptt-alert',
+        requireInteraction: true,
+        vibrate: [300, 100, 300, 100, 300],
+        data: { channel: data.channel, type: 'alert' }
+    };
+
+    e.waitUntil(self.registration.showNotification(title, options));
+});
+
 self.addEventListener('notificationclick', (e) => {
     e.notification.close();
+    const notifData = e.notification.data || {};
+
     e.waitUntil(
         clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-            // Focus existing window if found
+            // Focus existing window and send message
             for (const client of clientList) {
                 if (client.url.includes(self.location.origin) && 'focus' in client) {
+                    client.postMessage({ type: 'ALERT_TAP', channel: notifData.channel });
                     return client.focus();
                 }
             }
-            // Otherwise open a new window
-            return clients.openWindow('./');
+            // Otherwise open a new window with alert hash
+            const hash = notifData.channel ? `#alert=${notifData.channel}` : '';
+            return clients.openWindow('./' + hash);
         })
     );
 });

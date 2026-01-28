@@ -32,6 +32,12 @@ const ROOM_PASSWORD = "3361";
 // Only you should know this password
 const ADMIN_PASSWORD = "holdenadmin";
 
+// Callsigns that automatically get admin (case-insensitive)
+const ADMIN_CALLSIGNS = ["kj7dts", "christian"];
+
+// FCM VAPID key for web push (generate in Firebase Console > Cloud Messaging > Web Push certificates)
+const FCM_VAPID_KEY = "BO3PtS_JouQlD1pWNIzLy5s0Q6Dh1kak3Qg4vypp3KLSV1oQKwpyyzn5xFnuNmwg4_K2XO1dLKAUk9_SYNcfudk";
+
 // ========================================
 // DO NOT EDIT BELOW THIS LINE
 // ========================================

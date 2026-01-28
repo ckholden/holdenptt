@@ -146,6 +146,11 @@ const Auth = {
                 await PTTAudio.cleanup();
             }
 
+            // Remove FCM token before sign-out
+            if (typeof FCM !== 'undefined') {
+                await FCM.removeToken();
+            }
+
             // Sign out from Firebase
             await auth.signOut();
 

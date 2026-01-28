@@ -33,6 +33,7 @@ const App = {
         PTTAudio.init();
         Alerts.init();
         Recording.init();
+        FCM.init();
 
         // Initialize mobile tab system
         this.initMobileTabs();
@@ -304,6 +305,10 @@ const App = {
             if ('Notification' in window && Notification.permission === 'default') {
                 Notification.requestPermission();
             }
+
+            // Register FCM token and setup foreground handler
+            FCM.registerToken();
+            FCM.setupForegroundHandler();
 
             // Add welcome message
             Chat.addSystemMessage(`Welcome, ${user.displayName}! You are now in ${Channels.getChannelName(Channels.getCurrentChannel())}.`);

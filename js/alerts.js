@@ -7,6 +7,7 @@ const Alerts = {
     alertSound: null,
     isAlertPlaying: false,
     alertTimeout: null,
+    _pendingAlert: null,
 
     // Initialize alerts
     init() {
@@ -19,6 +20,35 @@ const Alerts = {
         document.getElementById('alert-btn').addEventListener('click', () => {
             this.sendAlert();
         });
+
+        // Play queued alert when user returns to app
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this._pendingAlert) {
+                const alert = this._pendingAlert;
+                this._pendingAlert = null;
+                this.showAlert(alert);
+            }
+        });
+
+        // Listen for ALERT_TAP from service worker (notification tap while app is open)
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.addEventListener('message', (event) => {
+                if (event.data && event.data.type === 'ALERT_TAP') {
+                    console.log('[Alerts] Notification tapped, playing tone');
+                    this.playTwoToneAlert();
+                }
+            });
+        }
+
+        // Check for cold-start alert hash (opened from notification when app was closed)
+        if (location.hash.startsWith('#alert=')) {
+            const channel = location.hash.replace('#alert=', '');
+            console.log('[Alerts] Cold start from notification, channel:', channel);
+            // Clear hash so it doesn't re-trigger
+            history.replaceState(null, '', location.pathname + location.search);
+            // Play tone after a short delay to let audio context initialize
+            setTimeout(() => this.playTwoToneAlert(), 1000);
+        }
     },
 
     // Create the alert sound using Web Audio API
@@ -176,6 +206,17 @@ const Alerts = {
     showAlert(alert) {
         if (this.isAlertPlaying) return;
 
+        // If app is backgrounded, send notification and queue for playback on return
+        if (document.hidden) {
+            console.log('[Alerts] App backgrounded, queuing alert from:', alert.sender);
+            this._pendingAlert = alert;
+            this.showAlertNotification(alert.sender);
+            if (typeof Chat !== 'undefined') {
+                Chat.addSystemMessage(`ALERT from ${alert.sender}`);
+            }
+            return;
+        }
+
         console.log('[Alerts] Showing alert from:', alert.sender);
         this.isAlertPlaying = true;
 
@@ -198,6 +239,18 @@ const Alerts = {
         this.alertTimeout = setTimeout(() => {
             this.hideAlert();
         }, 5000);
+    },
+
+    // Send browser notification for alerts when app is backgrounded
+    showAlertNotification(senderName) {
+        if (!('Notification' in window) || Notification.permission !== 'granted') return;
+        const channelName = Channels.getChannelName(Channels.getCurrentChannel());
+        const n = new Notification('ALERT - Holden PTT', {
+            body: `Emergency alert from ${senderName} on ${channelName}`,
+            tag: 'ptt-alert',
+            requireInteraction: true
+        });
+        // Don't auto-close — requireInteraction keeps it visible until tapped
     },
 
     // Hide alert overlay
